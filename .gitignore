@@ -22,3 +22,96 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+# 🚀 DevDirectory
+
+### Discover Developers. Explore Skills. Connect with the Community.
+
+DevDirectory is a developer directory designed to help people discover developers across different technical fields, explore their skills, and connect with the developer community.
+
+🔴 **Live Website:** https://avdeshmeena9785.github.io/Devdirectory/
+
+## ✨ Features
+
+* 👨‍💻 Developer directory with sample developer profiles
+* 🔍 Search developers by name, role, bio, and skills
+* 🗂️ Browse developers by category
+* 🛠️ Explore skills across different development fields
+* 🔐 Authentication for profile management
+* ☁️ Firebase integration for storing developer profiles
+* 📱 Responsive interface for different screen sizes
+* 🎨 Dark-themed interface with a red-gradient visual style
+
+## 🧑‍💻 Developer Categories
+
+* Frontend Development
+* Backend Development
+* Full Stack Development
+* AI / Machine Learning
+* Mobile Development
+* UI / UX Design
+* Other
+
+## 🛠️ Tech Stack
+
+* React
+* Vite
+* JavaScript
+* CSS
+* Firebase Authentication
+* Cloud Firestore
+* Git and GitHub
+* GitHub Pages
+
+## ⚙️ Run Locally
+
+### 1. Clone the repository
+
+```bash
+git clone https://github.com/avdeshmeena9785/Devdirectory.git
+```
+
+### 2. Open the project folder
+
+```bash
+cd Devdirectory
+```
+
+### 3. Install dependencies
+
+```bash
+npm install
+```
+
+### 4. Start the development server
+
+```bash
+npm run dev
+```
+
+Open the local URL displayed in your terminal.
+
+## 🌐 Live Demo
+
+Explore the live project:
+
+**https://avdeshmeena9785.github.io/Devdirectory/**
+
+## 🎯 Project Goal
+
+The goal of DevDirectory is to create a simple and interactive platform where developers can discover technical talent, explore different skills, and build connections with other developers.
+
+## 👨‍💻 Created By
+
+**Avdesh Meena**
+
+Full Stack Development Learner
+
+GitHub: https://github.com/avdeshmeena9785
+
+## ⭐ Support
+
+If you find this project interesting, consider giving the repository a star!
+
+---
+
+*Built with curiosity, creativity, and a passion for web development.*

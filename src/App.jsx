@@ -1,7 +1,5 @@
-
 import { useEffect, useMemo, useState } from "react";
 import "./App.css";
-
 import { auth, db } from "./firebase";
 
 import {
@@ -13,11 +11,13 @@ import {
 } from "firebase/auth";
 
 import {
+  addDoc,
   collection,
   deleteDoc,
   doc,
   onSnapshot,
   setDoc,
+  updateDoc,
   serverTimestamp,
 } from "firebase/firestore";
 
@@ -48,91 +48,54 @@ const emptyProfile = {
 
 const demoDevelopers = [
   {
-    id: "demo-aarav",
-    name: "Aarav Sharma",
-    username: "aaravdev",
+    id: "demo-alex",
+    name: "Alex Morgan",
+    role: "Full Stack Developer",
+    skills: ["React", "Node.js", "MongoDB"],
+    username: "alexmorgan",
+    bio: "Building useful web experiences from front end to back end.",
+  },
+  {
+    id: "demo-sarah",
+    name: "Sarah Chen",
     role: "Frontend Developer",
-    skills: ["HTML", "CSS", "JavaScript", "React"],
-    bio: "Creating responsive websites and interactive user interfaces.",
-    github: "",
-    linkedin: "",
-    portfolio: "",
-    photoURL: "",
+    skills: ["JavaScript", "React", "CSS"],
+    username: "sarahchen",
+    bio: "Creating accessible and polished user interfaces.",
   },
   {
-    id: "demo-priya",
-    name: "Priya Verma",
-    username: "priyacodes",
+    id: "demo-david",
+    name: "David Kumar",
     role: "Backend Developer",
-    skills: ["Node.js", "Express", "MongoDB", "REST API"],
-    bio: "Building APIs and reliable server-side applications.",
-    github: "",
-    linkedin: "",
-    portfolio: "",
-    photoURL: "",
+    skills: ["Python", "Django", "PostgreSQL"],
+    username: "davidkumar",
+    bio: "Designing reliable APIs and data-driven applications.",
   },
   {
-    id: "demo-rahul",
-    name: "Rahul Meena",
-    username: "rahulstack",
-    role: "Full Stack Developer",
-    skills: ["React", "Node.js", "Firebase", "JavaScript"],
-    bio: "Developing full stack applications from frontend to backend.",
-    github: "",
-    linkedin: "",
-    portfolio: "",
-    photoURL: "",
-  },
-  {
-    id: "demo-neha",
-    name: "Neha Gupta",
-    username: "nehai",
+    id: "demo-emma",
+    name: "Emma Wilson",
     role: "AI / ML Engineer",
-    skills: ["Python", "Machine Learning", "Pandas", "NumPy"],
-    bio: "Exploring artificial intelligence and machine learning.",
-    github: "",
-    linkedin: "",
-    portfolio: "",
-    photoURL: "",
+    skills: ["Python", "AI", "Machine Learning"],
+    username: "emmawilson",
+    bio: "Exploring practical applications of machine learning.",
   },
   {
-    id: "demo-arjun",
-    name: "Arjun Singh",
-    username: "arjunmobile",
+    id: "demo-ryan",
+    name: "Ryan Patel",
     role: "Mobile Developer",
-    skills: ["Flutter", "Dart", "Firebase", "Git"],
-    bio: "Building mobile applications for everyday needs.",
-    github: "",
-    linkedin: "",
-    portfolio: "",
-    photoURL: "",
+    skills: ["React Native", "Java", "Firebase"],
+    username: "ryanpatel",
+    bio: "Making helpful mobile experiences.",
   },
   {
-    id: "demo-ananya",
-    name: "Ananya Jain",
-    username: "ananyaux",
-    role: "UI/UX Designer",
-    skills: ["Figma", "UI Design", "Wireframing", "Prototyping"],
-    bio: "Designing intuitive interfaces and user-friendly experiences.",
-    github: "",
-    linkedin: "",
-    portfolio: "",
-    photoURL: "",
-  },
-  {
-    id: "demo-karan",
-    name: "Karan Yadav",
-    username: "karanfullstack",
-    role: "Full Stack Developer",
-    skills: ["React", "Java", "SQL", "JavaScript"],
-    bio: "Building modern web applications and database-driven systems.",
-    github: "",
-    linkedin: "",
-    portfolio: "",
-    photoURL: "",
+    id: "demo-olivia",
+    name: "Olivia Garcia",
+    role: "UI / UX Designer",
+    skills: ["Figma", "UI Design", "Prototyping"],
+    username: "oliviagarcia",
+    bio: "Turning complex ideas into clear, thoughtful designs.",
   },
 ];
-
 
 function initials(name = "Developer") {
   return (
@@ -146,35 +109,21 @@ function initials(name = "Developer") {
 }
 
 function safeUrl(value) {
-  if (!value || typeof value !== "string") return "";
+  if (!value) return "";
 
   const trimmed = value.trim();
 
   if (!trimmed) return "";
 
-  const url = /^https?:\/\//i.test(trimmed)
+  return /^https?:\/\//i.test(trimmed)
     ? trimmed
     : `https://${trimmed}`;
-
-  try {
-    const parsed = new URL(url);
-
-    if (!["http:", "https:"].includes(parsed.protocol)) {
-      return "";
-    }
-
-    return parsed.href;
-  } catch {
-    return "";
-  }
 }
 
 function App() {
   const [search, setSearch] = useState("");
   const [activeCategory, setActiveCategory] =
     useState("All Developers");
-
-  const [sortBy, setSortBy] = useState("latest");
 
   const [user, setUser] = useState(null);
 
@@ -202,19 +151,38 @@ function App() {
   const [showAdmin, setShowAdmin] = useState(false);
   const [adminMessage, setAdminMessage] = useState("");
 
-  const isAdmin =
-    user?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase();
+  const [showDashboard, setShowDashboard] = useState(false);
+  const [dashboardTab, setDashboardTab] = useState("overview");
 
-  // Firebase authentication listener
+  const [projects, setProjects] = useState([]);
+  const [achievements, setAchievements] = useState([]);
+
+  const [itemKind, setItemKind] = useState("");
+  const [editingItem, setEditingItem] = useState(null);
+  const [itemSaving, setItemSaving] = useState(false);
+  const [itemError, setItemError] = useState("");
+
+  const [itemForm, setItemForm] = useState({
+    title: "",
+    description: "",
+    technologies: "",
+    imageURL: "",
+    githubURL: "",
+    liveURL: "",
+    date: "",
+    certificateURL: "",
+  });
+
+  const isAdmin =
+    user?.email?.toLowerCase() === ADMIN_EMAIL;
+
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+    return onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
     });
-
-    return unsubscribe;
   }, []);
 
-  // Load developer profiles from Firestore
+  // Public developer directory
   useEffect(() => {
     const unsubscribe = onSnapshot(
       collection(db, "developers"),
@@ -229,12 +197,10 @@ function App() {
         setProfilesLoading(false);
       },
       (error) => {
-        console.error("Developer profiles could not be loaded:", error);
-
+        console.error(error);
         setDbError(
           "Profiles load nahi ho paaye. Firebase Firestore Rules check karein."
         );
-
         setProfilesLoading(false);
       }
     );
@@ -242,123 +208,153 @@ function App() {
     return unsubscribe;
   }, []);
 
-  // Search and category filters
- // Show demo developers and Firebase developers together
-const visibleProfiles = useMemo(() => {
-  const allProfiles = [
-    ...demoDevelopers,
-    ...profiles.filter(
-      (profile) =>
-        !demoDevelopers.some(
-          (demo) => demo.id === profile.id
-        )
-    ),
-  ];
-
-  return allProfiles.filter((developer) => {
-    const skills = Array.isArray(developer.skills)
-      ? developer.skills
-      : [];
-
-    const searchable = [
-      developer.name,
-      developer.username,
-      developer.role,
-      developer.bio,
-      ...skills,
-    ]
-      .join(" ")
-      .toLowerCase();
-
-    const matchesSearch = searchable.includes(
-      search.trim().toLowerCase()
+  // Public projects
+  useEffect(() => {
+    const unsubscribe = onSnapshot(
+      collection(db, "projects"),
+      (snapshot) => {
+        setProjects(
+          snapshot.docs.map((item) => ({
+            id: item.id,
+            ...item.data(),
+          }))
+        );
+      },
+      (error) => {
+        console.error("Projects load error:", error);
+      }
     );
 
-    const role = (developer.role || "").toLowerCase();
-    const category = activeCategory.toLowerCase();
+    return unsubscribe;
+  }, []);
 
-    let matchesCategory = activeCategory === "All Developers";
+  // Public achievements
+  useEffect(() => {
+    const unsubscribe = onSnapshot(
+      collection(db, "achievements"),
+      (snapshot) => {
+        setAchievements(
+          snapshot.docs.map((item) => ({
+            id: item.id,
+            ...item.data(),
+          }))
+        );
+      },
+      (error) => {
+        console.error("Achievements load error:", error);
+      }
+    );
 
-    if (category === "frontend") {
-      matchesCategory =
-        role.includes("front-end") ||
-        role.includes("frontend");
-    } else if (category === "backend") {
-      matchesCategory =
-        role.includes("back-end") ||
-        role.includes("backend");
-    } else if (category === "full stack") {
-      matchesCategory =
-        role.includes("full stack") ||
-        role.includes("full-stack");
-    } else if (category === "ai / ml") {
-      matchesCategory =
-        role.includes("ai") ||
-        role.includes("machine learning") ||
-        role.includes("ml engineer");
-    } else if (category === "mobile") {
-      matchesCategory =
-        role.includes("mobile") ||
-        role.includes("android") ||
-        role.includes("ios");
-    } else if (category === "ui / ux") {
-      matchesCategory =
-        role.includes("ui") ||
-        role.includes("ux") ||
-        role.includes("designer");
-    } else if (category === "other") {
-      matchesCategory = ![
-        "frontend",
-        "front-end",
-        "backend",
-        "back-end",
-        "full stack",
-        "full-stack",
-        "ai",
-        "machine learning",
-        "mobile",
-        "android",
-        "ios",
-        "ui",
-        "ux",
-        "designer",
-      ].some((term) => role.includes(term));
-    }
+    return unsubscribe;
+  }, []);
 
-    return matchesSearch && matchesCategory;
-  });
-}, [profiles, search, activeCategory]);
+  const visibleProfiles = useMemo(() => {
+    const base = profiles.length ? profiles : demoDevelopers;
 
-  // Sort filtered profiles
-  const sortedProfiles = useMemo(() => {
-    const result = [...visibleProfiles];
+    return base.filter((developer) => {
+      const searchable = [
+        developer.name,
+        developer.username,
+        developer.role,
+        developer.bio,
+        ...(developer.skills || []),
+      ]
+        .join(" ")
+        .toLowerCase();
 
-    if (sortBy === "name-asc") {
-      result.sort((a, b) =>
-        (a.name || "").localeCompare(b.name || "")
+      const matchesSearch = searchable.includes(
+        search.trim().toLowerCase()
       );
-    } else if (sortBy === "name-desc") {
-      result.sort((a, b) =>
-        (b.name || "").localeCompare(a.name || "")
-      );
-    } else if (sortBy === "latest") {
-      result.sort((a, b) => {
-        const dateA = a.updatedAt?.toMillis?.() || 0;
-        const dateB = b.updatedAt?.toMillis?.() || 0;
 
-        return dateB - dateA;
-      });
-    }
+      const role = (developer.role || "").toLowerCase();
+      const category = activeCategory.toLowerCase();
 
-    return result;
-  }, [visibleProfiles, sortBy]);
+      let matchesCategory = activeCategory === "All Developers";
+
+      if (category === "frontend") {
+        matchesCategory =
+          role.includes("front-end") ||
+          role.includes("frontend");
+      }
+
+      if (category === "backend") {
+        matchesCategory =
+          role.includes("back-end") ||
+          role.includes("backend");
+      }
+
+      if (category === "full stack") {
+        matchesCategory =
+          role.includes("full stack") ||
+          role.includes("full-stack");
+      }
+
+      if (category === "ai / ml") {
+        matchesCategory =
+          role.includes("ai") ||
+          role.includes("machine learning") ||
+          role.includes("ml engineer");
+      }
+
+      if (category === "mobile") {
+        matchesCategory =
+          role.includes("mobile") ||
+          role.includes("android") ||
+          role.includes("ios");
+      }
+
+      if (category === "ui / ux") {
+        matchesCategory =
+          role.includes("ui") ||
+          role.includes("ux") ||
+          role.includes("designer");
+      }
+
+      if (category === "other") {
+        matchesCategory = ![
+          "frontend",
+          "front-end",
+          "backend",
+          "back-end",
+          "full stack",
+          "full-stack",
+          "ai",
+          "machine learning",
+          "mobile",
+          "android",
+          "ios",
+          "ui",
+          "ux",
+          "designer",
+        ].some((term) => role.includes(term));
+      }
+
+      return matchesSearch && matchesCategory;
+    });
+  }, [profiles, search, activeCategory]);
 
   const myProfile = profiles.find(
     (profile) =>
-      profile.id === user?.uid || profile.ownerUid === user?.uid
+      profile.id === user?.uid ||
+      profile.ownerUid === user?.uid
   );
 
-  // Login and signup
+  const myProjects = projects.filter(
+    (project) => project.ownerUid === user?.uid
+  );
+
+  const myAchievements = achievements.filter(
+    (achievement) => achievement.ownerUid === user?.uid
+  );
+
+  function showMessage(message) {
+    setAdminMessage(message);
+
+    window.setTimeout(() => {
+      setAdminMessage("");
+    }, 3500);
+  }
+
   async function handleAuth(event) {
     event.preventDefault();
 
@@ -367,11 +363,12 @@ const visibleProfiles = useMemo(() => {
 
     try {
       if (isSignup) {
-        const credential = await createUserWithEmailAndPassword(
-          auth,
-          authEmail.trim(),
-          authPassword
-        );
+        const credential =
+          await createUserWithEmailAndPassword(
+            auth,
+            authEmail.trim(),
+            authPassword
+          );
 
         await updateProfile(credential.user, {
           displayName: authName.trim(),
@@ -404,7 +401,11 @@ const visibleProfiles = useMemo(() => {
           "Network error. Check your internet.",
       };
 
-      setAuthError(messages[error.code] || error.message || "Authentication failed.");
+      setAuthError(
+        messages[error.code] ||
+          error.message ||
+          "Authentication failed."
+      );
     } finally {
       setAuthLoading(false);
     }
@@ -412,11 +413,12 @@ const visibleProfiles = useMemo(() => {
 
   async function handleLogout() {
     await signOut(auth);
+
     setShowAdmin(false);
+    setShowDashboard(false);
     setSelectedProfile(null);
   }
 
-  // Open profile editor
   function openProfileForm() {
     if (!user) {
       setAuthError("");
@@ -446,7 +448,6 @@ const visibleProfiles = useMemo(() => {
     setShowProfileForm(true);
   }
 
-  // Save developer profile
   async function saveProfile(event) {
     event.preventDefault();
 
@@ -466,7 +467,9 @@ const visibleProfiles = useMemo(() => {
 
     const payload = {
       name: profileForm.name.trim(),
-      username: profileForm.username.trim().replace(/^@/, ""),
+      username: profileForm.username
+        .trim()
+        .replace(/^@/, ""),
       role: profileForm.role,
       photoURL: safeUrl(profileForm.photoURL),
       bio: profileForm.bio.trim(),
@@ -480,20 +483,20 @@ const visibleProfiles = useMemo(() => {
     };
 
     try {
-      await setDoc(doc(db, "developers", user.uid), payload, {
-        merge: true,
-      });
+      await setDoc(
+        doc(db, "developers", user.uid),
+        payload,
+        { merge: true }
+      );
 
       setShowProfileForm(false);
-      setAdminMessage("Profile saved successfully!");
-
-      window.setTimeout(() => setAdminMessage(""), 3500);
+      showMessage("Profile saved successfully!");
     } catch (error) {
       console.error(error);
 
       setProfileError(
         error.code === "permission-denied"
-          ? "Permission denied. Firebase Console mein Firestore Rules check karein."
+          ? "Permission denied. Firebase Rules check karein."
           : error.message || "Profile save nahi hua."
       );
     } finally {
@@ -501,7 +504,6 @@ const visibleProfiles = useMemo(() => {
     }
   }
 
-  // Admin-only profile deletion
   async function deleteProfile(profile) {
     if (!isAdmin) return;
 
@@ -515,20 +517,180 @@ const visibleProfiles = useMemo(() => {
 
     try {
       await deleteDoc(doc(db, "developers", profile.id));
-
-      setAdminMessage("Profile deleted.");
-
-      if (selectedProfile?.id === profile.id) {
-        setSelectedProfile(null);
-      }
+      showMessage("Profile deleted.");
     } catch (error) {
-      setAdminMessage(`Delete failed: ${error.message}`);
+      showMessage(`Delete failed: ${error.message}`);
     }
   }
 
+  // Open Add/Edit form for a project or achievement
+  function openItemForm(kind, item = null) {
+    if (!user) {
+      setShowAuth(true);
+      setAuthError("");
+      return;
+    }
+
+    setItemKind(kind);
+    setEditingItem(item);
+    setItemError("");
+
+    setItemForm({
+      title: item?.title || "",
+      description: item?.description || "",
+      technologies: Array.isArray(item?.technologies)
+        ? item.technologies.join(", ")
+        : "",
+      imageURL: item?.imageURL || "",
+      githubURL: item?.githubURL || "",
+      liveURL: item?.liveURL || "",
+      date: item?.date || "",
+      certificateURL: item?.certificateURL || "",
+    });
+  }
+
+  async function saveDashboardItem(event) {
+    event.preventDefault();
+
+    if (!user) {
+      setItemError("Login karna zaroori hai.");
+      return;
+    }
+
+    setItemSaving(true);
+    setItemError("");
+
+    const collectionName =
+      itemKind === "project" ? "projects" : "achievements";
+
+    const payload = {
+      title: itemForm.title.trim(),
+      description: itemForm.description.trim(),
+      ownerUid: user.uid,
+      ownerName: myProfile?.name || user.displayName || "Developer",
+      ownerEmail: user.email || "",
+      updatedAt: serverTimestamp(),
+    };
+
+    if (itemKind === "project") {
+      payload.technologies = itemForm.technologies
+        .split(",")
+        .map((technology) => technology.trim())
+        .filter(Boolean)
+        .slice(0, 20);
+
+      payload.imageURL = safeUrl(itemForm.imageURL);
+      payload.githubURL = safeUrl(itemForm.githubURL);
+      payload.liveURL = safeUrl(itemForm.liveURL);
+    } else {
+      payload.date = itemForm.date;
+      payload.certificateURL = safeUrl(itemForm.certificateURL);
+    }
+
+    try {
+      if (editingItem) {
+        // UI ownership check; Firestore Rules must enforce this too.
+        if (editingItem.ownerUid !== user.uid) {
+          throw new Error(
+            "Tum sirf apna content edit kar sakte ho."
+          );
+        }
+
+        await updateDoc(
+          doc(db, collectionName, editingItem.id),
+          payload
+        );
+
+        showMessage("Updated successfully!");
+      } else {
+        payload.createdAt = serverTimestamp();
+
+        await addDoc(
+          collection(db, collectionName),
+          payload
+        );
+
+        showMessage("Added successfully!");
+      }
+
+      setItemKind("");
+      setEditingItem(null);
+    } catch (error) {
+      console.error(error);
+
+      setItemError(
+        error.code === "permission-denied"
+          ? "Permission denied. Firebase Rules publish karein."
+          : error.message || "Save nahi ho paya."
+      );
+    } finally {
+      setItemSaving(false);
+    }
+  }
+
+  async function deleteDashboardItem(kind, item) {
+    if (!user || item.ownerUid !== user.uid) {
+      showMessage(
+        "Tum sirf apne projects aur achievements delete kar sakte ho."
+      );
+      return;
+    }
+
+    const label =
+      kind === "project" ? "project" : "achievement";
+
+    if (
+      !window.confirm(
+        `Kya tum ye ${label} delete karna chahte ho?`
+      )
+    ) {
+      return;
+    }
+
+    const collectionName =
+      kind === "project" ? "projects" : "achievements";
+
+    try {
+      await deleteDoc(
+        doc(db, collectionName, item.id)
+      );
+
+      showMessage(`${label} deleted successfully.`);
+    } catch (error) {
+      showMessage(
+        error.code === "permission-denied"
+          ? "Delete permission nahi hai. Firebase Rules check karo."
+          : error.message
+      );
+    }
+  }
+
+  function openDeveloperProfile(profile) {
+    setSelectedProfile(profile);
+  }
+
+  const selectedProjects = selectedProfile
+    ? projects.filter(
+        (project) =>
+          project.ownerUid ===
+          (selectedProfile.ownerUid || selectedProfile.id)
+      )
+    : [];
+
+  const selectedAchievements = selectedProfile
+    ? achievements.filter(
+        (achievement) =>
+          achievement.ownerUid ===
+          (selectedProfile.ownerUid || selectedProfile.id)
+      )
+    : [];
+
   return (
     <div className="app">
-      {/* Login / Signup Modal */}
+      <div className="background-glow glow-one" />
+      <div className="background-glow glow-two" />
+
+      {/* LOGIN / SIGN UP */}
       {showAuth && (
         <div
           className="auth-overlay"
@@ -542,7 +704,6 @@ const visibleProfiles = useMemo(() => {
             className="auth-modal"
             role="dialog"
             aria-modal="true"
-            aria-labelledby="auth-title"
           >
             <button
               className="auth-close"
@@ -552,9 +713,11 @@ const visibleProfiles = useMemo(() => {
               ×
             </button>
 
-            <span className="section-label">WELCOME TO DEVDIRECTORY</span>
+            <span className="section-label">
+              WELCOME TO DEVDIRECTORY
+            </span>
 
-            <h2 id="auth-title">
+            <h2>
               {isSignup ? "Create Account" : "Welcome Back"}
             </h2>
 
@@ -570,7 +733,9 @@ const visibleProfiles = useMemo(() => {
                   type="text"
                   placeholder="Your full name"
                   value={authName}
-                  onChange={(e) => setAuthName(e.target.value)}
+                  onChange={(event) =>
+                    setAuthName(event.target.value)
+                  }
                   required
                   minLength={2}
                   autoComplete="name"
@@ -581,7 +746,9 @@ const visibleProfiles = useMemo(() => {
                 type="email"
                 placeholder="Email address"
                 value={authEmail}
-                onChange={(e) => setAuthEmail(e.target.value)}
+                onChange={(event) =>
+                  setAuthEmail(event.target.value)
+                }
                 required
                 autoComplete="email"
               />
@@ -590,10 +757,14 @@ const visibleProfiles = useMemo(() => {
                 type="password"
                 placeholder="Password (at least 6 characters)"
                 value={authPassword}
-                onChange={(e) => setAuthPassword(e.target.value)}
+                onChange={(event) =>
+                  setAuthPassword(event.target.value)
+                }
                 required
                 minLength={6}
-                autoComplete={isSignup ? "new-password" : "current-password"}
+                autoComplete={
+                  isSignup ? "new-password" : "current-password"
+                }
               />
 
               {authError && (
@@ -610,15 +781,16 @@ const visibleProfiles = useMemo(() => {
                 {authLoading
                   ? "Please wait..."
                   : isSignup
-                    ? "Create Account"
-                    : "Login"}
+                  ? "Create Account"
+                  : "Login"}
               </button>
             </form>
 
             <p className="auth-switch">
               {isSignup
                 ? "Already have an account?"
-                : "New to DevDirectory?"}{" "}
+                : "New to DevDirectory?"}
+
               <button
                 type="button"
                 onClick={() => {
@@ -626,14 +798,14 @@ const visibleProfiles = useMemo(() => {
                   setAuthError("");
                 }}
               >
-                {isSignup ? "Login" : "Create account"}
+                {isSignup ? " Login" : " Create account"}
               </button>
             </p>
           </section>
         </div>
       )}
 
-      {/* Create / Edit Profile Modal */}
+      {/* PROFILE FORM */}
       {showProfileForm && (
         <div
           className="feature-overlay"
@@ -643,37 +815,37 @@ const visibleProfiles = useMemo(() => {
             }
           }}
         >
-          <section
-            className="feature-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="profile-form-title"
-          >
+          <section className="feature-modal">
             <button
               className="auth-close"
               onClick={() => setShowProfileForm(false)}
-              aria-label="Close profile form"
             >
               ×
             </button>
 
-            <span className="section-label">YOUR DEVELOPER IDENTITY</span>
+            <span className="section-label">
+              YOUR DEVELOPER IDENTITY
+            </span>
 
-            <h2 id="profile-form-title">
+            <h2>
               {myProfile ? "Edit Your Profile" : "Create Your Profile"}
             </h2>
 
-            <p>
-              Your profile will be saved to Firebase and shown in the directory.
-            </p>
+            <p>Your profile will be saved to Firebase.</p>
 
-            <form className="profile-form" onSubmit={saveProfile}>
+            <form
+              className="profile-form"
+              onSubmit={saveProfile}
+            >
               <label>
                 Full name
                 <input
                   value={profileForm.name}
-                  onChange={(e) =>
-                    setProfileForm({ ...profileForm, name: e.target.value })
+                  onChange={(event) =>
+                    setProfileForm({
+                      ...profileForm,
+                      name: event.target.value,
+                    })
                   }
                   required
                   maxLength={80}
@@ -685,8 +857,11 @@ const visibleProfiles = useMemo(() => {
                 Username
                 <input
                   value={profileForm.username}
-                  onChange={(e) =>
-                    setProfileForm({ ...profileForm, username: e.target.value })
+                  onChange={(event) =>
+                    setProfileForm({
+                      ...profileForm,
+                      username: event.target.value,
+                    })
                   }
                   required
                   maxLength={30}
@@ -698,8 +873,11 @@ const visibleProfiles = useMemo(() => {
                 Developer role
                 <select
                   value={profileForm.role}
-                  onChange={(e) =>
-                    setProfileForm({ ...profileForm, role: e.target.value })
+                  onChange={(event) =>
+                    setProfileForm({
+                      ...profileForm,
+                      role: event.target.value,
+                    })
                   }
                 >
                   {[
@@ -713,22 +891,23 @@ const visibleProfiles = useMemo(() => {
                     "Student Developer",
                     "Other",
                   ].map((role) => (
-                    <option key={role} value={role}>
-                      {role}
-                    </option>
+                    <option key={role}>{role}</option>
                   ))}
                 </select>
               </label>
 
               <label>
-                Profile photo URL (optional)
+                Profile photo URL
                 <input
                   type="url"
                   value={profileForm.photoURL}
-                  onChange={(e) =>
-                    setProfileForm({ ...profileForm, photoURL: e.target.value })
+                  onChange={(event) =>
+                    setProfileForm({
+                      ...profileForm,
+                      photoURL: event.target.value,
+                    })
                   }
-                  placeholder="https://example.com/photo.jpg"
+                  placeholder="https://..."
                 />
               </label>
 
@@ -736,14 +915,17 @@ const visibleProfiles = useMemo(() => {
                 About you
                 <textarea
                   value={profileForm.bio}
-                  onChange={(e) =>
-                    setProfileForm({ ...profileForm, bio: e.target.value })
+                  onChange={(event) =>
+                    setProfileForm({
+                      ...profileForm,
+                      bio: event.target.value,
+                    })
                   }
                   required
                   minLength={10}
                   maxLength={500}
-                  placeholder="Tell people what you build and what you are interested in..."
                   rows={4}
+                  placeholder="Tell people what you build..."
                 />
               </label>
 
@@ -751,8 +933,11 @@ const visibleProfiles = useMemo(() => {
                 Skills (comma separated)
                 <input
                   value={profileForm.skills}
-                  onChange={(e) =>
-                    setProfileForm({ ...profileForm, skills: e.target.value })
+                  onChange={(event) =>
+                    setProfileForm({
+                      ...profileForm,
+                      skills: event.target.value,
+                    })
                   }
                   required
                   placeholder="React, JavaScript, Firebase"
@@ -764,8 +949,11 @@ const visibleProfiles = useMemo(() => {
                 <input
                   type="url"
                   value={profileForm.github}
-                  onChange={(e) =>
-                    setProfileForm({ ...profileForm, github: e.target.value })
+                  onChange={(event) =>
+                    setProfileForm({
+                      ...profileForm,
+                      github: event.target.value,
+                    })
                   }
                   placeholder="https://github.com/username"
                 />
@@ -776,22 +964,25 @@ const visibleProfiles = useMemo(() => {
                 <input
                   type="url"
                   value={profileForm.linkedin}
-                  onChange={(e) =>
-                    setProfileForm({ ...profileForm, linkedin: e.target.value })
+                  onChange={(event) =>
+                    setProfileForm({
+                      ...profileForm,
+                      linkedin: event.target.value,
+                    })
                   }
                   placeholder="https://linkedin.com/in/username"
                 />
               </label>
 
               <label className="full-field">
-                Portfolio / website URL
+                Portfolio URL
                 <input
                   type="url"
                   value={profileForm.portfolio}
-                  onChange={(e) =>
+                  onChange={(event) =>
                     setProfileForm({
                       ...profileForm,
-                      portfolio: e.target.value,
+                      portfolio: event.target.value,
                     })
                   }
                   placeholder="https://yourwebsite.com"
@@ -799,7 +990,7 @@ const visibleProfiles = useMemo(() => {
               </label>
 
               {profileError && (
-                <p className="auth-error full-field" role="alert">
+                <p className="auth-error full-field">
                   {profileError}
                 </p>
               )}
@@ -826,7 +1017,212 @@ const visibleProfiles = useMemo(() => {
         </div>
       )}
 
-      {/* Developer Details Modal */}
+      {/* PROJECT / ACHIEVEMENT FORM */}
+      {itemKind && (
+        <div
+          className="feature-overlay"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) {
+              setItemKind("");
+              setEditingItem(null);
+            }
+          }}
+        >
+          <section className="feature-modal">
+            <button
+              className="auth-close"
+              onClick={() => {
+                setItemKind("");
+                setEditingItem(null);
+              }}
+            >
+              ×
+            </button>
+
+            <span className="section-label">
+              {itemKind === "project"
+                ? "SHOWCASE YOUR WORK"
+                : "CELEBRATE YOUR PROGRESS"}
+            </span>
+
+            <h2>
+              {editingItem ? "Edit" : "Add"}{" "}
+              {itemKind === "project" ? "Project" : "Achievement"}
+            </h2>
+
+            <form
+              className="profile-form"
+              onSubmit={saveDashboardItem}
+            >
+              <label className="full-field">
+                Title
+                <input
+                  value={itemForm.title}
+                  onChange={(event) =>
+                    setItemForm({
+                      ...itemForm,
+                      title: event.target.value,
+                    })
+                  }
+                  required
+                  maxLength={100}
+                  placeholder={
+                    itemKind === "project"
+                      ? "My awesome project"
+                      : "Achievement title"
+                  }
+                />
+              </label>
+
+              <label className="full-field">
+                Description
+                <textarea
+                  value={itemForm.description}
+                  onChange={(event) =>
+                    setItemForm({
+                      ...itemForm,
+                      description: event.target.value,
+                    })
+                  }
+                  required
+                  minLength={5}
+                  maxLength={1500}
+                  rows={4}
+                  placeholder="Describe your work or achievement..."
+                />
+              </label>
+
+              {itemKind === "project" ? (
+                <>
+                  <label className="full-field">
+                    Technologies (comma separated)
+                    <input
+                      value={itemForm.technologies}
+                      onChange={(event) =>
+                        setItemForm({
+                          ...itemForm,
+                          technologies: event.target.value,
+                        })
+                      }
+                      placeholder="React, Firebase, CSS"
+                    />
+                  </label>
+
+                  <label className="full-field">
+                    Thumbnail image URL (optional)
+                    <input
+                      type="url"
+                      value={itemForm.imageURL}
+                      onChange={(event) =>
+                        setItemForm({
+                          ...itemForm,
+                          imageURL: event.target.value,
+                        })
+                      }
+                      placeholder="https://..."
+                    />
+                  </label>
+
+                  <label>
+                    GitHub URL
+                    <input
+                      type="url"
+                      value={itemForm.githubURL}
+                      onChange={(event) =>
+                        setItemForm({
+                          ...itemForm,
+                          githubURL: event.target.value,
+                        })
+                      }
+                      placeholder="https://github.com/..."
+                    />
+                  </label>
+
+                  <label>
+                    Live Demo URL
+                    <input
+                      type="url"
+                      value={itemForm.liveURL}
+                      onChange={(event) =>
+                        setItemForm({
+                          ...itemForm,
+                          liveURL: event.target.value,
+                        })
+                      }
+                      placeholder="https://..."
+                    />
+                  </label>
+                </>
+              ) : (
+                <>
+                  <label>
+                    Achievement date
+                    <input
+                      type="date"
+                      value={itemForm.date}
+                      onChange={(event) =>
+                        setItemForm({
+                          ...itemForm,
+                          date: event.target.value,
+                        })
+                      }
+                    />
+                  </label>
+
+                  <label>
+                    Certificate URL (optional)
+                    <input
+                      type="url"
+                      value={itemForm.certificateURL}
+                      onChange={(event) =>
+                        setItemForm({
+                          ...itemForm,
+                          certificateURL: event.target.value,
+                        })
+                      }
+                      placeholder="https://..."
+                    />
+                  </label>
+                </>
+              )}
+
+              {itemError && (
+                <p className="auth-error full-field">
+                  {itemError}
+                </p>
+              )}
+
+              <div className="form-actions full-field">
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={() => {
+                    setItemKind("");
+                    setEditingItem(null);
+                  }}
+                >
+                  Cancel
+                </button>
+
+                <button
+                  className="primary-button"
+                  type="submit"
+                  disabled={itemSaving}
+                >
+                  {itemSaving
+                    ? "Saving..."
+                    : editingItem
+                    ? "Update"
+                    : "Save"}{" "}
+                  →
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
+      )}
+
+      {/* PUBLIC DEVELOPER DETAIL */}
       {selectedProfile && (
         <div
           className="feature-overlay"
@@ -836,16 +1232,10 @@ const visibleProfiles = useMemo(() => {
             }
           }}
         >
-          <section
-            className="feature-modal detail-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="detail-name"
-          >
+          <section className="feature-modal detail-modal">
             <button
               className="auth-close"
               onClick={() => setSelectedProfile(null)}
-              aria-label="Close profile"
             >
               ×
             </button>
@@ -854,11 +1244,8 @@ const visibleProfiles = useMemo(() => {
               {selectedProfile.photoURL ? (
                 <img
                   className="detail-avatar"
-                  src={safeUrl(selectedProfile.photoURL)}
+                  src={selectedProfile.photoURL}
                   alt={`${selectedProfile.name} profile`}
-                  onError={(e) => {
-                    e.currentTarget.style.display = "none";
-                  }}
                 />
               ) : (
                 <div className="detail-avatar detail-initials">
@@ -867,11 +1254,22 @@ const visibleProfiles = useMemo(() => {
               )}
 
               <div>
-                <span className="section-label">DEVELOPER PROFILE</span>
-                <h2 id="detail-name">{selectedProfile.name}</h2>
-                <p className="developer-role">{selectedProfile.role}</p>
+                <span className="section-label">
+                  DEVELOPER PROFILE
+                </span>
+
+                <h2>{selectedProfile.name}</h2>
+
+                <p className="developer-role">
+                  {selectedProfile.role}
+                </p>
+
                 <span className="username">
-                  @{(selectedProfile.username || "developer").replace(/^@/, "")}
+                  @
+                  {(selectedProfile.username || "developer").replace(
+                    /^@/,
+                    ""
+                  )}
                 </span>
               </div>
             </div>
@@ -883,13 +1281,12 @@ const visibleProfiles = useMemo(() => {
                 "This developer has not added a bio yet."}
             </p>
 
-            <h3 className="detail-subtitle">Skills & technologies</h3>
+            <h3 className="detail-subtitle">
+              Skills & Technologies
+            </h3>
 
             <div className="skill-list detail-skills">
-              {(Array.isArray(selectedProfile.skills)
-                ? selectedProfile.skills
-                : []
-              ).map((skill) => (
+              {(selectedProfile.skills || []).map((skill) => (
                 <span className="skill-tag" key={skill}>
                   {skill}
                 </span>
@@ -902,19 +1299,104 @@ const visibleProfiles = useMemo(() => {
                 ["LinkedIn", selectedProfile.linkedin],
                 ["Portfolio", selectedProfile.portfolio],
               ]
-                .filter((item) => safeUrl(item[1]))
+                .filter((item) => item[1])
                 .map(([label, url]) => (
                   <a
                     key={label}
                     className="secondary-button"
                     href={safeUrl(url)}
                     target="_blank"
-                    rel="noopener noreferrer"
+                    rel="noreferrer"
                   >
                     {label} ↗
                   </a>
                 ))}
             </div>
+
+            <h3 className="detail-subtitle">Projects</h3>
+
+            {selectedProjects.length === 0 ? (
+              <p>No public projects added yet.</p>
+            ) : (
+              <div className="dashboard-item-list">
+                {selectedProjects.map((project) => (
+                  <article className="dashboard-item" key={project.id}>
+                    {project.imageURL && (
+                      <img
+                        className="project-thumbnail"
+                        src={project.imageURL}
+                        alt={project.title}
+                      />
+                    )}
+
+                    <h4>{project.title}</h4>
+                    <p>{project.description}</p>
+
+                    <div className="skill-list">
+                      {(project.technologies || []).map((technology) => (
+                        <span className="skill-tag" key={technology}>
+                          {technology}
+                        </span>
+                      ))}
+                    </div>
+
+                    <div className="detail-links">
+                      {project.githubURL && (
+                        <a
+                          className="secondary-button"
+                          href={safeUrl(project.githubURL)}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          GitHub ↗
+                        </a>
+                      )}
+
+                      {project.liveURL && (
+                        <a
+                          className="secondary-button"
+                          href={safeUrl(project.liveURL)}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          Live Demo ↗
+                        </a>
+                      )}
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+
+            <h3 className="detail-subtitle">Achievements</h3>
+
+            {selectedAchievements.length === 0 ? (
+              <p>No public achievements added yet.</p>
+            ) : (
+              <div className="dashboard-item-list">
+                {selectedAchievements.map((achievement) => (
+                  <article
+                    className="dashboard-item"
+                    key={achievement.id}
+                  >
+                    <h4>{achievement.title}</h4>
+                    {achievement.date && <small>{achievement.date}</small>}
+                    <p>{achievement.description}</p>
+
+                    {achievement.certificateURL && (
+                      <a
+                        className="secondary-button"
+                        href={safeUrl(achievement.certificateURL)}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        View Certificate ↗
+                      </a>
+                    )}
+                  </article>
+                ))}
+              </div>
+            )}
 
             {isAdmin && (
               <button
@@ -928,10 +1410,7 @@ const visibleProfiles = useMemo(() => {
         </div>
       )}
 
-      <div className="background-glow glow-one" />
-      <div className="background-glow glow-two" />
-
-      {/* Navigation */}
+      {/* NAVBAR */}
       <header className="navbar">
         <a className="brand" href="#home">
           <span className="brand-icon">&lt;/&gt;</span>
@@ -940,9 +1419,7 @@ const visibleProfiles = useMemo(() => {
         </a>
 
         <nav className="nav-links">
-          <a className="nav-active" href="#home">
-            Home
-          </a>
+          <a className="nav-active" href="#home">Home</a>
           <a href="#developers">Explore Developers</a>
           <a href="#about">About</a>
         </nav>
@@ -954,14 +1431,30 @@ const visibleProfiles = useMemo(() => {
                 {user.displayName || user.email}
               </span>
 
-              <button className="join-button" onClick={openProfileForm}>
+              <button
+                className="join-button"
+                onClick={() => {
+                  setShowDashboard(!showDashboard);
+                  setShowAdmin(false);
+                }}
+              >
+                {showDashboard ? "Close Dashboard" : "Dashboard"}
+              </button>
+
+              <button
+                className="join-button"
+                onClick={openProfileForm}
+              >
                 {myProfile ? "Edit Profile" : "Add Profile"}
               </button>
 
               {isAdmin && (
                 <button
                   className="join-button admin-nav-button"
-                  onClick={() => setShowAdmin(!showAdmin)}
+                  onClick={() => {
+                    setShowAdmin(!showAdmin);
+                    setShowDashboard(false);
+                  }}
                 >
                   {showAdmin ? "Hide Admin" : "Admin Dashboard"}
                 </button>
@@ -986,7 +1479,7 @@ const visibleProfiles = useMemo(() => {
       </header>
 
       <main id="home">
-        {/* Hero */}
+        {/* HERO */}
         <section className="hero">
           <div className="announcement">
             <span className="live-dot" />
@@ -1013,7 +1506,10 @@ const visibleProfiles = useMemo(() => {
               Explore Directory <span>→</span>
             </a>
 
-            <button className="secondary-button" onClick={openProfileForm}>
+            <button
+              className="secondary-button"
+              onClick={openProfileForm}
+            >
               Add Your Profile +
             </button>
           </div>
@@ -1021,25 +1517,23 @@ const visibleProfiles = useMemo(() => {
           <div className="hero-stats">
             <div>
               <strong>
-                {String(profiles.length || demoDevelopers.length).padStart(
-                  2,
-                  "0"
-                )}
+                {String(
+                  profiles.length || demoDevelopers.length
+                ).padStart(2, "0")}
               </strong>
               <span>Developer Profiles</span>
             </div>
 
             <div>
-            <strong>
-  {
-    new Set(
-      [...demoDevelopers, ...profiles].flatMap((profile) =>
-        Array.isArray(profile.skills) ? profile.skills : []
-      )
-    ).size
-  }+
-</strong>
-<span>Skills Listed</span>
+              <strong>
+                {new Set(
+                  (profiles.length ? profiles : demoDevelopers).flatMap(
+                    (profile) => profile.skills || []
+                  )
+                ).size}
+                +
+              </strong>
+              <span>Skills Listed</span>
             </div>
 
             <div>
@@ -1049,7 +1543,252 @@ const visibleProfiles = useMemo(() => {
           </div>
         </section>
 
-        {/* Admin Dashboard */}
+        {/* PERSONAL DASHBOARD */}
+        {showDashboard && user && (
+          <section className="admin-section personal-dashboard">
+            <div className="section-heading">
+              <div>
+                <span className="section-label">PERSONAL WORKSPACE</span>
+                <h2>
+                  My <span className="gradient-text">Dashboard.</span>
+                </h2>
+                <p>
+                  Manage your profile, projects and achievements.
+                </p>
+              </div>
+            </div>
+
+            {adminMessage && (
+              <p className="status-message">{adminMessage}</p>
+            )}
+
+            <div className="dashboard-tabs">
+              {[
+                ["overview", "Overview"],
+                ["projects", "My Projects"],
+                ["achievements", "My Achievements"],
+              ].map(([tab, label]) => (
+                <button
+                  key={tab}
+                  className={`category-button ${
+                    dashboardTab === tab ? "category-active" : ""
+                  }`}
+                  onClick={() => setDashboardTab(tab)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {dashboardTab === "overview" && (
+              <>
+                <div className="dashboard-stats">
+                  <article className="dashboard-stat">
+                    <span>MY PROJECTS</span>
+                    <strong>{myProjects.length}</strong>
+                  </article>
+
+                  <article className="dashboard-stat">
+                    <span>MY ACHIEVEMENTS</span>
+                    <strong>{myAchievements.length}</strong>
+                  </article>
+
+                  <article className="dashboard-stat">
+                    <span>PROFILE STATUS</span>
+                    <strong>{myProfile ? "Ready" : "Incomplete"}</strong>
+                  </article>
+                </div>
+
+                <div className="dashboard-welcome">
+                  <h3>
+                    Welcome,{" "}
+                    {myProfile?.name || user.displayName || "Developer"}!
+                  </h3>
+
+                  <p>
+                    Add your work and achievements so other developers
+                    can discover what you build.
+                  </p>
+
+                  <button
+                    className="primary-button"
+                    onClick={openProfileForm}
+                  >
+                    {myProfile ? "Edit My Profile" : "Create My Profile"}
+                  </button>
+                </div>
+              </>
+            )}
+
+            {dashboardTab === "projects" && (
+              <>
+                <div className="section-heading">
+                  <div>
+                    <h3>My Projects</h3>
+                    <p>Only you can manage your projects.</p>
+                  </div>
+
+                  <button
+                    className="primary-button"
+                    onClick={() => openItemForm("project")}
+                  >
+                    + Add Project
+                  </button>
+                </div>
+
+                {myProjects.length === 0 ? (
+                  <div className="empty-state">
+                    <h3>No projects yet</h3>
+                    <p>Add your first project to your profile.</p>
+                  </div>
+                ) : (
+                  <div className="dashboard-item-list">
+                    {myProjects.map((project) => (
+                      <article className="dashboard-item" key={project.id}>
+                        {project.imageURL && (
+                          <img
+                            className="project-thumbnail"
+                            src={project.imageURL}
+                            alt={project.title}
+                          />
+                        )}
+
+                        <h4>{project.title}</h4>
+                        <p>{project.description}</p>
+
+                        <div className="skill-list">
+                          {(project.technologies || []).map((technology) => (
+                            <span className="skill-tag" key={technology}>
+                              {technology}
+                            </span>
+                          ))}
+                        </div>
+
+                        <div className="detail-links">
+                          {project.githubURL && (
+                            <a
+                              className="secondary-button"
+                              href={safeUrl(project.githubURL)}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              GitHub ↗
+                            </a>
+                          )}
+
+                          {project.liveURL && (
+                            <a
+                              className="secondary-button"
+                              href={safeUrl(project.liveURL)}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              Live Demo ↗
+                            </a>
+                          )}
+
+                          <button
+                            className="secondary-button"
+                            onClick={() => openItemForm("project", project)}
+                          >
+                            Edit
+                          </button>
+
+                          <button
+                            className="danger-button"
+                            onClick={() =>
+                              deleteDashboardItem("project", project)
+                            }
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+
+            {dashboardTab === "achievements" && (
+              <>
+                <div className="section-heading">
+                  <div>
+                    <h3>My Achievements</h3>
+                    <p>Show certificates, awards and milestones.</p>
+                  </div>
+
+                  <button
+                    className="primary-button"
+                    onClick={() => openItemForm("achievement")}
+                  >
+                    + Add Achievement
+                  </button>
+                </div>
+
+                {myAchievements.length === 0 ? (
+                  <div className="empty-state">
+                    <h3>No achievements yet</h3>
+                    <p>Add your first achievement or certificate.</p>
+                  </div>
+                ) : (
+                  <div className="dashboard-item-list">
+                    {myAchievements.map((achievement) => (
+                      <article
+                        className="dashboard-item"
+                        key={achievement.id}
+                      >
+                        <h4>{achievement.title}</h4>
+
+                        {achievement.date && (
+                          <small>{achievement.date}</small>
+                        )}
+
+                        <p>{achievement.description}</p>
+
+                        {achievement.certificateURL && (
+                          <a
+                            className="secondary-button"
+                            href={safeUrl(achievement.certificateURL)}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            View Certificate ↗
+                          </a>
+                        )}
+
+                        <div className="detail-links">
+                          <button
+                            className="secondary-button"
+                            onClick={() =>
+                              openItemForm("achievement", achievement)
+                            }
+                          >
+                            Edit
+                          </button>
+
+                          <button
+                            className="danger-button"
+                            onClick={() =>
+                              deleteDashboardItem(
+                                "achievement",
+                                achievement
+                              )
+                            }
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+          </section>
+        )}
+
+        {/* ADMIN DASHBOARD */}
         {showAdmin && isAdmin && (
           <section className="admin-section" id="admin-dashboard">
             <div className="section-heading">
@@ -1058,17 +1797,13 @@ const visibleProfiles = useMemo(() => {
                 <h2>
                   Admin <span className="gradient-text">Dashboard.</span>
                 </h2>
-                <p>Review and moderate submitted developer profiles.</p>
+                <p>Review and moderate developer profiles.</p>
               </div>
 
               <span className="results-count">
                 {profiles.length} PROFILES
               </span>
             </div>
-
-            {adminMessage && (
-              <p className="status-message">{adminMessage}</p>
-            )}
 
             {profiles.length === 0 ? (
               <p className="empty-admin">No submitted profiles yet.</p>
@@ -1093,7 +1828,7 @@ const visibleProfiles = useMemo(() => {
                     <div className="admin-row-actions">
                       <button
                         className="secondary-button"
-                        onClick={() => setSelectedProfile(profile)}
+                        onClick={() => openDeveloperProfile(profile)}
                       >
                         View
                       </button>
@@ -1112,7 +1847,7 @@ const visibleProfiles = useMemo(() => {
           </section>
         )}
 
-        {/* Developer Directory */}
+        {/* PUBLIC DIRECTORY */}
         <section className="directory-section" id="developers">
           <div className="section-heading">
             <div>
@@ -1132,10 +1867,6 @@ const visibleProfiles = useMemo(() => {
             <p className="status-message error-status">{dbError}</p>
           )}
 
-          {adminMessage && !showAdmin && (
-            <p className="status-message">{adminMessage}</p>
-          )}
-
           <div className="search-box">
             <span className="search-icon">⌕</span>
 
@@ -1143,7 +1874,7 @@ const visibleProfiles = useMemo(() => {
               type="text"
               placeholder="Search developers, skills, technologies..."
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(event) => setSearch(event.target.value)}
               aria-label="Search developers"
             />
 
@@ -1164,25 +1895,6 @@ const visibleProfiles = useMemo(() => {
             ))}
           </div>
 
-          {/* Sorting */}
-          <div className="directory-toolbar">
-            <label className="sort-label" htmlFor="developer-sort">
-              Sort developers:
-            </label>
-
-            <select
-              id="developer-sort"
-              className="sort-select"
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value)}
-              aria-label="Sort developers"
-            >
-              <option value="latest">Latest Updated</option>
-              <option value="name-asc">Name: A–Z</option>
-              <option value="name-desc">Name: Z–A</option>
-            </select>
-          </div>
-
           {profilesLoading && (
             <p className="loading-message">
               Loading developer directory...
@@ -1190,7 +1902,7 @@ const visibleProfiles = useMemo(() => {
           )}
 
           <div className="developer-grid">
-            {sortedProfiles.map((developer, index) => (
+            {visibleProfiles.map((developer, index) => (
               <article
                 className="developer-card"
                 key={developer.id}
@@ -1200,19 +1912,14 @@ const visibleProfiles = useMemo(() => {
                   {developer.photoURL ? (
                     <img
                       className="avatar profile-card-image"
-                      src={safeUrl(developer.photoURL)}
+                      src={developer.photoURL}
                       alt={`${developer.name} avatar`}
-                      onError={(e) => {
-                        e.currentTarget.style.display = "none";
-                      }}
                     />
                   ) : (
                     <div
                       className="avatar"
                       style={{
-                        "--avatar-color": `hsl(${
-                          (index * 43 + 355) % 360
-                        } 85% 60%)`,
+                        "--avatar-color": `hsl(${(index * 43 + 355) % 360} 85% 60%)`,
                       }}
                     >
                       {initials(developer.name)}
@@ -1241,59 +1948,16 @@ const visibleProfiles = useMemo(() => {
                 </p>
 
                 <div className="skill-list">
-                  {(Array.isArray(developer.skills)
-                    ? developer.skills
-                    : []
-                  )
-                    .slice(0, 4)
-                    .map((skill) => (
-                      <span className="skill-tag" key={skill}>
-                        {skill}
-                      </span>
-                    ))}
-                </div>
-
-                {/* GitHub, LinkedIn and Portfolio */}
-                <div className="card-social-links">
-                  {developer.github && safeUrl(developer.github) && (
-                    <a
-                      className="social-link"
-                      href={safeUrl(developer.github)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      aria-label={`GitHub profile of ${developer.name}`}
-                    >
-                      GitHub ↗
-                    </a>
-                  )}
-
-                  {developer.linkedin && safeUrl(developer.linkedin) && (
-                    <a
-                      className="social-link"
-                      href={safeUrl(developer.linkedin)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      aria-label={`LinkedIn profile of ${developer.name}`}
-                    >
-                      LinkedIn ↗
-                    </a>
-                  )}
-
-                  {developer.portfolio && safeUrl(developer.portfolio) && (
-                    <a
-                      className="social-link"
-                      href={safeUrl(developer.portfolio)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      Portfolio ↗
-                    </a>
-                  )}
+                  {(developer.skills || []).slice(0, 4).map((skill) => (
+                    <span className="skill-tag" key={skill}>
+                      {skill}
+                    </span>
+                  ))}
                 </div>
 
                 <button
                   className="profile-button"
-                  onClick={() => setSelectedProfile(developer)}
+                  onClick={() => openDeveloperProfile(developer)}
                 >
                   View Profile <span>↗</span>
                 </button>
@@ -1327,7 +1991,7 @@ const visibleProfiles = useMemo(() => {
           )}
         </section>
 
-        {/* Call to action */}
+        {/* ABOUT */}
         <section className="cta-section" id="about">
           <span className="section-label">YOUR JOURNEY STARTS HERE</span>
 
@@ -1342,13 +2006,15 @@ const visibleProfiles = useMemo(() => {
             with people who love building things.
           </p>
 
-          <button className="primary-button" onClick={openProfileForm}>
+          <button
+            className="primary-button"
+            onClick={openProfileForm}
+          >
             Create Your Profile ↑
           </button>
         </section>
       </main>
 
-      {/* Footer */}
       <footer className="footer">
         <a className="brand footer-brand" href="#home">
           <span className="brand-icon">&lt;/&gt;</span>
@@ -1365,4 +2031,3 @@ const visibleProfiles = useMemo(() => {
 }
 
 export default App;
-
